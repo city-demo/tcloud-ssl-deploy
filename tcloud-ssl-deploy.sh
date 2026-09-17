@@ -268,8 +268,9 @@ main() {
 
         local deploy_record_id=0
         local retry=0
-        # 增加至 15 次重试，每次 120 秒，总计约 30 分钟轮询窗口
-        while [[ "$retry" -lt 15 ]]; do
+        local task_started=0
+        # 轮询确认：每次间隔 10 秒，最多重试 30 次（约 5 分钟）
+        while [[ "$retry" -lt 30 ]]; do
             local update_resp
             update_resp=$(tcloud_api ssl UpdateCertificateInstance "$update_payload")
             local err_code
@@ -279,10 +280,19 @@ main() {
             if [[ -n "$err_code" ]]; then
                 debug "更新接口响应异常 ($((retry+1))): $update_resp"
                 if [[ "$err_code" == "ResourceNotFound.CertificateNotFound" || "$update_resp" == *"证书不存在"* ]]; then
-                    log "Wait: 云端索引未就绪，120 秒后重试..."
-                    sleep 120
+                    log "Wait: 云端索引未就绪，10 秒后重试..."
+                    sleep 10
                     retry=$((retry + 1))
                     continue
+                fi
+                # 若此前已成功触发任务 (task_started=1)，此时报"未检测到可用实例"表明旧证书实例已全部更新切换完毕
+                if [[ "$task_started" -eq 1 && "$err_code" == "FailedOperation.CertificateDeployInstanceEmpty" ]]; then
+                    log "OK: 原证书关联实例已全部更新完成并成功切换至新证书！"
+                    deploy_record_id="completed"
+                    break
+                fi
+                if [[ "$err_code" == "FailedOperation.CertificateDeployInstanceEmpty" ]]; then
+                    die "更新失败：系统未检测到旧证书关联的可用实例。若是首次部署，请先在腾讯云控制台手动将证书绑定到云资源一次。"
                 fi
                 die "更新失败：$(echo "$update_resp" | jq -r '.Response.Error.Message')"
             fi
@@ -295,14 +305,15 @@ main() {
                 log "OK: 部署任务已成功创建！任务 ID: ${deploy_record_id}"
                 break
             else
-                log "Wait: 任务创建中 (DeployRecordId=0)，120 秒后进行第 $((retry+1)) 次确认..."
-                sleep 120
+                task_started=1
+                log "Wait: 任务执行中 (DeployRecordId=0)，10 秒后进行第 $((retry+1)) 次确认..."
+                sleep 10
                 retry=$((retry + 1))
             fi
         done
 
         if [[ "$deploy_record_id" == "0" || -z "$deploy_record_id" ]]; then
-            die "部署任务创建超时。请检查腾讯云控制台。 "
+            die "部署任务创建超时。请检查腾讯云控制台。"
         fi
     else
         log "Skip: 未发现旧证书 ID 或未配置资源类型，跳过关联资源更新。"
