@@ -268,8 +268,8 @@ main() {
 
         local deploy_record_id=0
         local retry=0
-        # 增加至 10 次重试，每次 15 秒，总计 150 秒轮询窗口
-        while [[ "$retry" -lt 10 ]]; do
+        # 增加至 15 次重试，每次 120 秒，总计约 30 分钟轮询窗口
+        while [[ "$retry" -lt 15 ]]; do
             local update_resp
             update_resp=$(tcloud_api ssl UpdateCertificateInstance "$update_payload")
             local err_code
@@ -279,8 +279,8 @@ main() {
             if [[ -n "$err_code" ]]; then
                 debug "更新接口响应异常 ($((retry+1))): $update_resp"
                 if [[ "$err_code" == "ResourceNotFound.CertificateNotFound" || "$update_resp" == *"证书不存在"* ]]; then
-                    log "Wait: 云端索引未就绪，60 秒后重试..."
-                    sleep 60
+                    log "Wait: 云端索引未就绪，120 秒后重试..."
+                    sleep 120
                     retry=$((retry + 1))
                     continue
                 fi
@@ -295,8 +295,8 @@ main() {
                 log "OK: 部署任务已成功创建！任务 ID: ${deploy_record_id}"
                 break
             else
-                log "Wait: 任务创建中 (DeployRecordId=0)，60 秒后进行第 $((retry+1)) 次确认..."
-                sleep 60
+                log "Wait: 任务创建中 (DeployRecordId=0)，120 秒后进行第 $((retry+1)) 次确认..."
+                sleep 120
                 retry=$((retry + 1))
             fi
         done
