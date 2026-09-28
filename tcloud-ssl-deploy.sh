@@ -78,12 +78,14 @@ die() {
 
 countdown() {
     local seconds=$1
+    local step=10
     while [ "$seconds" -gt 0 ]; do
-        printf "\r[$(date '+%Y-%m-%d %H:%M:%S')] [Wait] 正在同步云端索引，剩余时间: %2d 秒..." "$seconds"
-        sleep 1
-        seconds=$((seconds - 1))
+        log "Wait: 正在同步云端索引，剩余等待时间: ${seconds} 秒..."
+        local sleep_sec=$(( seconds > step ? step : seconds ))
+        sleep "$sleep_sec"
+        seconds=$(( seconds - sleep_sec ))
     done
-    printf "\r[$(date '+%Y-%m-%d %H:%M:%S')] [Done] 缓冲结束，准备执行更新...          \n"
+    log "Done: 缓冲结束，准备执行更新。"
 }
 
 tcloud_api() {
